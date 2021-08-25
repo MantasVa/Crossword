@@ -5,24 +5,21 @@ object Main extends App {
   val file = new File(s"${System.getProperty("user.dir")}\\$filename")
 
   val words = IO.getHeadLine(file).map(_.split(" ")).map(_.toList)
-  val tail = IO.getTail(file)
+  val crossword = IO.getTail(file).map(_.toArray.map(s => s.toCharArray))
 
-  val crosswordUnsolved = tail.map(_.toArray.map(s => s.toCharArray))
+  val horizontalPatterns = Parser.getWordsHorizontally(crossword)
+  val verticalPatterns = Parser.getWordsVertically(crossword)
 
-  val horizontalWordPatterns = Parser.getWordsHorizontally(crosswordUnsolved)
-  val verticalWordPatterns = Parser.getWordsVertically(crosswordUnsolved)
-
-  val patterns = (horizontalWordPatterns, verticalWordPatterns) match {
+  val patterns = (horizontalPatterns, verticalPatterns) match {
     case (Some(as), Some(xs)) => Some(as ::: xs)
     case (_, s) => s
     case (s, _) => s
     case _ => None
   }
-  val solved = CrosswordSolver.fitWordsIntoPatterns(patterns, words)
-  println(solved)
+  val wordPatternsOption = CrosswordSolver.fitWordsIntoPatterns(patterns, words)
+  val solvedCrosswordOption = CrosswordSolver.solveCrosswordHorizontally(crossword, 0, crossword.get(0).indexWhere(_ != ' '), wordPatternsOption)
 
-  val option = CrosswordSolver.solveCrosswordHorizontally(crosswordUnsolved, 0, crosswordUnsolved.get(0).indexWhere(_ != ' '), solved)
-  option.get foreach { row => row foreach print; println }
+  solvedCrosswordOption.getOrElse(Array()) foreach { row => row foreach print; println }
 }
 
 
