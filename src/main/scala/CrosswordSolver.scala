@@ -35,7 +35,7 @@ object CrosswordSolver {
     crossword.flatMap(cr => {
       val row = cr(rowIndex)
       val spaceIndex = row.indexWhere(c => c == ' ', startIndex)
-      val wordPattern = row.slice(startIndex, if (spaceIndex == -1) row.length else spaceIndex)
+      val pattern = row.slice(startIndex, if (spaceIndex == -1) row.length else spaceIndex)
 
       def goToNextStep(arr: Array[Array[Char]], leftWords: Option[List[(String, String)]]): Option[Array[Array[Char]]] = {
         val nextStartIndex = if (spaceIndex != -1) row.indexWhere(_ != ' ', spaceIndex) else -1
@@ -46,28 +46,13 @@ object CrosswordSolver {
         }
       }
 
-      if (startIndex == row.length - 1 || wordPattern.length == 1) {
+      if (startIndex == row.length - 1 || pattern.length == 1) {
         goToNextStep(cr, wordsOption)
       } else {
         val endIndex = if (spaceIndex == -1) row.length else spaceIndex
 
-        val crossingPatterns = wordPattern.zip(startIndex until endIndex).foldLeft(None: Option[List[CrossingWordPattern]])((l, wpi) => {
-          if ((rowIndex > 0 && isPatternMarking(cr(rowIndex - 1)(wpi._2)))
-            || rowIndex < cr.length - 1 && isPatternMarking(cr(rowIndex + 1)(wpi._2))) {
-
-            val crossingColumn = getColumn(wpi._2, cr)
-            val patternEndIndex = if (crossingColumn.indexOf(' ', rowIndex) == -1) row.length else crossingColumn.indexOf(' ', rowIndex)
-            val upperSideColumn = crossingColumn.dropRight(crossingColumn.length - patternEndIndex)
-            val patternStartIndex = if (upperSideColumn.lastIndexOf(' ') == -1) 0 else upperSideColumn.lastIndexOf(' ') + 1
-            val crossingPattern = if (patternStartIndex > 0) upperSideColumn.drop(patternStartIndex) else upperSideColumn
-
-            Some(l.getOrElse(Nil) :+ CrossingWordPattern(crossingPattern, rowIndex - patternStartIndex, wpi._2 - startIndex))
-          }
-          else {
-            l
-          }
-        })
-        val suitableWords = getSuitableWords(wordPattern, wordsOption).flatMap(sw => {
+        val crossingPatterns = getCrossingWordPatterns(pattern, cr, startIndex, endIndex, rowIndex)
+        val suitableWords = getSuitableWords(pattern, wordsOption).flatMap(sw => {
           val crossingSuitableWords = crossingPatterns.map(xs => xs.map(cp => (cp, getSuitableWords(cp.crossingPattern, wordsOption).getOrElse(Nil))))
           crossingSuitableWords.map(cw => {
             cw.foldLeft(sw)((l, cp) => {
@@ -80,7 +65,7 @@ object CrosswordSolver {
         if (suitableWordsCount > 1) {
           suitableWords.flatMap(_.foldLeft(None: Option[Array[Array[Char]]])((l, w) => {
             val leftWords = wordsOption.map(xs => xs.filterNot(_._1.sameElements(w._1)))
-            val updatedCrossword = updateCrossword(w._1, cr, rowIndex, (startIndex, spaceIndex))
+            val updatedCrossword = updateCrossword(w._1, cr, rowIndex, startIndex, spaceIndex)
 
             val finalCrossword = goToNextStep(updatedCrossword, leftWords)
             if (finalCrossword.isEmpty) l else finalCrossword
@@ -88,7 +73,7 @@ object CrosswordSolver {
         } else if (suitableWordsCount == 1) {
           val selectedWord = suitableWords.get.head
           val leftWords = wordsOption.map(xs => xs.filterNot(_._1.sameElements(selectedWord._1)))
-          val updatedCrossword = updateCrossword(selectedWord._1, cr, rowIndex, (startIndex, spaceIndex))
+          val updatedCrossword = updateCrossword(selectedWord._1, cr, rowIndex, startIndex, spaceIndex)
 
           goToNextStep(updatedCrossword, leftWords)
         }
@@ -99,6 +84,8 @@ object CrosswordSolver {
     }
     )
   }
+
+
 
   def solveCrosswordVertically(crossword: Option[Array[Array[Char]]],
                                rowIndex: Int,
@@ -128,7 +115,7 @@ object CrosswordSolver {
         if (suitableWordsCount > 1) {
           suitableWords.flatMap(_.foldLeft(None: Option[Array[Array[Char]]])((l, w) => {
             val leftWords = wordsOption.map(xs => xs.filterNot(_._1.sameElements(w._1)))
-            val updatedCrossword = updateCrossword(w._1, crt, rowIndex, (startIndex, spaceIndex))
+            val updatedCrossword = updateCrossword(w._1, crt, rowIndex, startIndex, spaceIndex)
 
             val finalCrossword = goToNextStep(updatedCrossword.transpose, leftWords)
             if (finalCrossword.isEmpty) l else finalCrossword
@@ -136,13 +123,34 @@ object CrosswordSolver {
         } else if (suitableWordsCount == 1) {
           val selectedWord = suitableWords.get.head
           val leftWords = wordsOption.map(xs => xs.filterNot(_._1.sameElements(selectedWord._1)))
-          val updatedCrossword = updateCrossword(selectedWord._1, crt, rowIndex, (startIndex, spaceIndex))
+          val updatedCrossword = updateCrossword(selectedWord._1, crt, rowIndex, startIndex, spaceIndex)
           goToNextStep(updatedCrossword.transpose, leftWords)
         }
         else {
           None
         }
 
+      }
+    })
+  }
+
+  def getCrossingWordPatterns(pattern: Array[Char],
+                              crossword: Array[Array[Char]],
+                              startIndex: Int, endIndex: Int, rowIndex: Int): Option[List[CrossingWordPattern]] = {
+    pattern.zip(startIndex until endIndex).foldLeft(None: Option[List[CrossingWordPattern]])((l, wpi) => {
+      if ((rowIndex > 0 && isPatternMarking(crossword(rowIndex - 1)(wpi._2)))
+        || rowIndex < crossword.length - 1 && isPatternMarking(crossword(rowIndex + 1)(wpi._2))) {
+
+        val crossingColumn = getColumn(wpi._2, crossword)
+        val patternEndIndex = if (crossingColumn.indexOf(' ', rowIndex) == -1) crossword(rowIndex).length else crossingColumn.indexOf(' ', rowIndex)
+        val upperSideColumn = crossingColumn.dropRight(crossingColumn.length - patternEndIndex)
+        val patternStartIndex = if (upperSideColumn.lastIndexOf(' ') == -1) 0 else upperSideColumn.lastIndexOf(' ') + 1
+        val crossingPattern = if (patternStartIndex > 0) upperSideColumn.drop(patternStartIndex) else upperSideColumn
+
+        Some(l.getOrElse(Nil) :+ CrossingWordPattern(crossingPattern, rowIndex - patternStartIndex, wpi._2 - startIndex))
+      }
+      else {
+        l
       }
     })
   }
@@ -166,10 +174,10 @@ object CrosswordSolver {
 
   }
 
-  def updateCrossword(word: String, crossword: Array[Array[Char]], rowIndex: Int, startSpaceIndexes: (Int, Int)): Array[Array[Char]] = {
+  def updateCrossword(word: String, crossword: Array[Array[Char]], rowIndex: Int, startIndex: Int, endIndex:Int): Array[Array[Char]] = {
     Array.tabulate(crossword.length, crossword.head.length) { (i, y) =>
-      if (i == rowIndex && y >= startSpaceIndexes._1 && (y < startSpaceIndexes._2 || startSpaceIndexes._2 == -1)) {
-        word(y - startSpaceIndexes._1)
+      if (i == rowIndex && y >= startIndex && (y < endIndex || endIndex == -1)) {
+        word(y - startIndex)
       } else {
         crossword(i)(y)
       }
